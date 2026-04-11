@@ -4,7 +4,6 @@ pymongo
 chromadb
 python-dotenv
 pydantic
-sentence-transformers
-google-generativeai
 groq
 reportlab
+onnxruntime
