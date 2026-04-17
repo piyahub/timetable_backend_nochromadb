@@ -7,6 +7,7 @@ venv/
 
 # ChromaDB
 chroma_db/
+chroma_store/
 
 # Python cache
 __pycache__/
@@ -17,3 +18,7 @@ __pycache__/
 
 #vscode config
 .vscode/
+
+
+
+

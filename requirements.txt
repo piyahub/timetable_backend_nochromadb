@@ -1,9 +1,17 @@
+# fastapi
+# uvicorn
+# pymongo
+# chromadb
+# python-dotenv
+# pydantic
+# groq
+# reportlab
+# onnxruntime
+
 fastapi
 uvicorn
 pymongo
-chromadb
 python-dotenv
 pydantic
 groq
 reportlab
-onnxruntime
