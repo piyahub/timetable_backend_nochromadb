@@ -43,20 +43,21 @@ def build_mongo_filter(parsed: dict) -> dict:
 
 def retrieve(parsed: dict, user_query: str, top_k: int = 100) -> list:
     """
-    MongoDB-only retrieval.
-    top_k is high (100) to ensure ALL slots for a faculty are returned.
-    No early break — collects everything then returns.
+    MongoDB-only retrieval. Returns ALL matching results without early cutoff.
+    Handles room queries, subject queries, faculty queries and course timetables.
     """
     mongo_filter = build_mongo_filter(parsed)
-    # No limit on MongoDB query — fetch ALL matching docs
     docs = list(locksems_col.find(mongo_filter))
 
     if not docs:
         return []
 
-    results = []
+    intent         = parsed.get("intent", "general")
     faculty_filter = parsed.get("faculty", "").lower() if parsed.get("faculty") else None
     room_filter    = parsed.get("room", "").lower()    if parsed.get("room")    else None
+    subject_filter = parsed.get("subject", "").lower() if parsed.get("subject") else None
+
+    results = []
 
     for doc in docs:
         day  = doc.get("day",  "")
@@ -72,13 +73,22 @@ def retrieve(parsed: dict, user_query: str, top_k: int = 100) -> list:
             if not faculty and not subject:
                 continue
 
-            # Faculty filter — case insensitive partial match
+            # ── Faculty filter ────────────────────────────────────────────────
             if faculty_filter and faculty_filter not in faculty.lower():
                 continue
 
-            # Room filter — case insensitive partial match
+            # ── Room filter — case insensitive ────────────────────────────────
             if room_filter and room_filter not in room.lower():
                 continue
+
+            # ── Subject filter ────────────────────────────────────────────────
+            if subject_filter and subject_filter not in subject.lower():
+                continue
+
+            # ── For room_availability: only include entries in that room ──────
+            if intent == "room_availability" and room_filter:
+                if room_filter not in room.lower():
+                    continue
 
             results.append({
                 "faculty": faculty,
@@ -92,4 +102,4 @@ def retrieve(parsed: dict, user_query: str, top_k: int = 100) -> list:
                 "text":    f"{faculty} teaches {subject} in {room} on {day} {slot} for {sem}",
             })
 
-    return results  # return ALL results, answerer will deduplicate subjects
+    return results

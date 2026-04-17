@@ -1,42 +1,34 @@
-# Simple profanity checker — no external dependencies needed
-# Add more words to the list as needed
+# Profanity checker — uses whole-word matching only to avoid false positives
+# "mf" inside "EMF", "ass" inside "class", "dick" inside "Frederick" etc.
 
-PROFANITY_LIST = [
-    "fuck", "shit", "bitch", "asshole", "bastard", "damn", "crap",
-    "ass", "dick", "cock", "pussy", "whore", "slut", "nigger", "nigga",
+PROFANITY_LIST = {
+    "fuck", "shit", "bitch", "asshole", "bastard", "crap",
+    "cock", "pussy", "whore", "slut", "nigger", "nigga",
     "faggot", "retard", "cunt", "motherfucker", "bullshit", "piss",
-    "wtf", "stfu", "fck", "fuk", "fvck", "sh1t", "b1tch", "a$$",
+    "fck", "fuk", "fvck", "sh1t", "b1tch",
     # Hindi profanity (romanized)
-    "madarchod", "bhenchod", "chutiya", "gaandu", "harami", "sala",
-    "saala", "randi", "mc", "bc", "mf",
-]
+    "madarchod", "bhenchod", "chutiya", "gaandu", "harami", "randi",
+}
+
+# These are checked as whole words only (not substrings)
+# to avoid false positives like EMF, classic, assess, etc.
+
+import re
 
 def contains_profanity(text: str) -> bool:
     """
-    Returns True if the text contains any profanity.
-    Checks whole words and common letter substitutions.
+    Returns True only if a profanity word appears as a complete word.
+    Uses word boundary matching to avoid false positives.
     """
-    text_lower = text.lower()
+    # Normalize: lowercase, replace common substitutions
+    cleaned = text.lower()
+    cleaned = cleaned.replace("@", "a").replace("0", "o").replace(
+        "1", "i").replace("3", "e").replace("$", "s").replace("4", "a")
 
-    # Remove common punctuation for checking
-    cleaned = text_lower.replace("!", "").replace("@", "a").replace(
-        "0", "o").replace("1", "i").replace("3", "e").replace(
-        "$", "s").replace("4", "a")
+    # Extract words only (split on non-alphanumeric)
+    words = set(re.findall(r'\b[a-z]+\b', cleaned))
 
-    words = cleaned.split()
-
-    for word in words:
-        # Strip punctuation from word edges
-        word = word.strip(".,!?;:\"'()-")
-        if word in PROFANITY_LIST:
-            return True
-
-    # Also check if any profanity appears as substring (catches concatenated words)
-    for profanity in PROFANITY_LIST:
-        if profanity in cleaned:
-            return True
-
-    return False
+    return bool(words & PROFANITY_LIST)
 
 
 PROFANITY_RESPONSE = (

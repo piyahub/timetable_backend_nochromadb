@@ -24,37 +24,73 @@ Fields to extract:
 - subject: subject name as string, or null
 - sem: semester string like B.Sc-CHE-4 if mentioned exactly, or null
 - course: degree name like B.Sc, B.Tech, BCA etc, or null
-- branch: department/branch like CHE, CSE, PHY etc, or null
+- branch: department/branch abbreviation like CHE, CSE, PHY, ME etc, or null
 - semester_number: just the number like 4, 6 etc, or null
 - slot: period name like period1, period2 etc, or null
 
-Intent guide:
-- faculty_schedule: user asks what/when a faculty teaches
-- room_availability: user asks about a room
-- subject_info: user asks who teaches a subject or when a subject is taught
-- free_slots: user asks when a faculty is free or available
-- sem_timetable: user asks for a full timetable of a class/sem/branch
-- general: anything else
+═══════════════════════════════════════════════════
+CRITICAL RULE — ROOM DETECTION (read carefully):
+═══════════════════════════════════════════════════
+A room identifier is any alphanumeric code that looks like a physical location.
+Room patterns include: EE-304, CY-102, SB-3, ALT-0-2, L8-B, ALT-3-3, LH-1 etc.
+The pattern is typically: 2-4 letters, optionally followed by dash and numbers.
 
-IMPORTANT: If the query uses pronouns like "he", "she", "they", "his", "her", "their", "it"
-or references like "that faculty", "the same person", "them" — resolve them using the
-conversation history provided. For example if history shows we were talking about
-"Rawel Singh" and user asks "when is he free?", extract faculty as "Rawel Singh".
+If the query contains ANY such pattern — even without the word "room" —
+set intent to "room_availability" and extract it as the room field.
+
+Examples:
+- "what is in ee-304 on monday" → room: "EE-304", intent: room_availability
+- "ee-304 monday period3" → room: "EE-304", intent: room_availability  
+- "cy-102 wednesday" → room: "CY-102", intent: room_availability
+- "who is in sb-3 during period2" → room: "SB-3", intent: room_availability
+- "what happens in alt-3-3 on friday" → room: "ALT-3-3", intent: room_availability
+- "is l8-b free on tuesday" → room: "L8-B", intent: room_availability
+- "what subject is taught in cy-102" → room: "CY-102", intent: room_availability
+
+═══════════════════════════════════════════════════
+COURSE/SEM MATCHING:
+═══════════════════════════════════════════════════
+Map natural language to structured fields:
+- "bsc chemical" / "b.sc chemistry" / "bsc che" → course: "B.Sc", branch: "CHE"
+- "btech computer science" / "btech cse" → course: "B.Tech", branch: "CSE"
+- "mtech" → course: "M.Tech"
+- "msc chemistry" → course: "M.Sc", branch: "CHE"
+- "4th semester" / "semester 4" / "4th sem" / "sem 4" → semester_number: 4
+
+Branch mappings:
+- chemical/chemistry/che → CHE
+- computer/cse/cs → CSE
+- mechanical/me/mech → ME
+- electrical/ee → EE
+- electronics/ece → ECE
+- civil/ce → CE
+- physics/phy → PHY
+- maths/math/mathematics/ma → MA
+
+═══════════════════════════════════════════════════
+PRONOUN RESOLUTION:
+═══════════════════════════════════════════════════
+If the query uses "he", "she", "they", "his", "her", "it", "that faculty" —
+resolve them using conversation history below.
+
+═══════════════════════════════════════════════════
+OTHER INTENT RULES:
+═══════════════════════════════════════════════════
+- faculty_schedule: user asks what/when a faculty teaches
+- subject_info: user asks who teaches a subject or when it is taught
+- free_slots: user asks when a faculty is free or available
+- sem_timetable: user asks for full timetable of a class/branch/semester
+- general: anything not covered above
 
 {history_section}
 Current Query: "{query}"
 """
 
 def parse_query(user_query: str, history: list = []) -> dict:
-    """
-    Sends the user query to Groq and returns extracted fields as a dict.
-    Uses conversation history to resolve pronouns and follow-up references.
-    """
-    # Build history section for the prompt
     history_section = ""
     if history:
-        history_section = "Conversation history (use this to resolve pronouns/references):\n"
-        for msg in history[-6:]:  # last 3 exchanges
+        history_section = "Conversation history (use to resolve pronouns/references):\n"
+        for msg in history[-6:]:
             role = "User" if msg["role"] == "user" else "Assistant"
             history_section += f"{role}: {msg['content']}\n"
         history_section += "\n"
@@ -91,12 +127,16 @@ def parse_query(user_query: str, history: list = []) -> dict:
 
 if __name__ == "__main__":
     tests = [
-        "When is Rawel Singh free on Monday?",
-        "Who teaches chemistry to B.Sc CHE semester 4?",
-        "What is in room CY-102 on Wednesday period3?",
-        "Show me the full timetable for B.Sc-CHE-4",
-        "When does Suneel Dutt teach on Friday?",
+        "ee-304 on monday",
+        "what is in cy-102 wednesday period3",
+        "sb-3 thursday period2",
+        "alt-3-3 friday",
+        "who is teaching in l8-b on tuesday",
+        "bsc chemical 4th semester timetable",
+        "when is emf theory taught",
+        "is rawel singh free on monday",
     ]
     for q in tests:
         print(f"\nQ: {q}")
-        print(f"→ {parse_query(q)}")
+        result = parse_query(q)
+        print(f"→ intent={result['intent']}, room={result['room']}, faculty={result['faculty']}, subject={result['subject']}")
