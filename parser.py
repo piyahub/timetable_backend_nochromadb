@@ -17,7 +17,7 @@ You are a college timetable query parser. Extract structured fields from the use
 Return ONLY valid JSON. No explanation. No extra text. No markdown. No code blocks.
 
 Fields to extract:
-- intent: one of [faculty_schedule, room_availability, subject_info, free_slots, sem_timetable, general]
+- intent: one of [faculty_schedule, room_availability, room_free_slots, subject_info, free_slots, sem_timetable, general]
 - faculty: full or partial faculty name as string, or null
 - room: room name/number as string, or null
 - day: full day name (Monday/Tuesday/Wednesday/Thursday/Friday/Saturday) or null
@@ -29,58 +29,48 @@ Fields to extract:
 - slot: period name like period1, period2 etc, or null
 
 ═══════════════════════════════════════════════════
-CRITICAL RULE — ROOM DETECTION (read carefully):
+ROOM DETECTION (CRITICAL):
 ═══════════════════════════════════════════════════
-A room identifier is any alphanumeric code that looks like a physical location.
-Room patterns include: EE-304, CY-102, SB-3, ALT-0-2, L8-B, ALT-3-3, LH-1 etc.
-The pattern is typically: 2-4 letters, optionally followed by dash and numbers.
+Room identifiers are alphanumeric codes like: EE-304, CY-102, SB-3, ALT-0-2, L8-B
+Pattern: letters optionally followed by dash and numbers.
 
-If the query contains ANY such pattern — even without the word "room" —
-set intent to "room_availability" and extract it as the room field.
+If query contains such a pattern WITHOUT asking about free/empty/available:
+→ intent: room_availability, room: <the code>
+
+If query asks when a room is FREE, EMPTY, AVAILABLE, VACANT:
+→ intent: room_free_slots, room: <the code>
 
 Examples:
-- "what is in ee-304 on monday" → room: "EE-304", intent: room_availability
-- "ee-304 monday period3" → room: "EE-304", intent: room_availability  
-- "cy-102 wednesday" → room: "CY-102", intent: room_availability
-- "who is in sb-3 during period2" → room: "SB-3", intent: room_availability
-- "what happens in alt-3-3 on friday" → room: "ALT-3-3", intent: room_availability
-- "is l8-b free on tuesday" → room: "L8-B", intent: room_availability
-- "what subject is taught in cy-102" → room: "CY-102", intent: room_availability
+- "ee-304 on monday" → intent: room_availability, room: "EE-304"
+- "what is in cy-102 wednesday" → intent: room_availability, room: "CY-102"
+- "when is ee-304 free on monday" → intent: room_free_slots, room: "EE-304"
+- "is ee-304 empty on monday" → intent: room_free_slots, room: "EE-304"
+- "which periods is sb-3 available on friday" → intent: room_free_slots, room: "SB-3"
+- "when is cy-102 vacant" → intent: room_free_slots, room: "CY-102"
 
 ═══════════════════════════════════════════════════
 COURSE/SEM MATCHING:
 ═══════════════════════════════════════════════════
-Map natural language to structured fields:
-- "bsc chemical" / "b.sc chemistry" / "bsc che" → course: "B.Sc", branch: "CHE"
+- "bsc chemical" / "b.sc chemistry" → course: "B.Sc", branch: "CHE"
 - "btech computer science" / "btech cse" → course: "B.Tech", branch: "CSE"
-- "mtech" → course: "M.Tech"
 - "msc chemistry" → course: "M.Sc", branch: "CHE"
-- "4th semester" / "semester 4" / "4th sem" / "sem 4" → semester_number: 4
+- "4th semester" / "sem 4" → semester_number: 4
 
 Branch mappings:
-- chemical/chemistry/che → CHE
-- computer/cse/cs → CSE
-- mechanical/me/mech → ME
-- electrical/ee → EE
-- electronics/ece → ECE
-- civil/ce → CE
-- physics/phy → PHY
-- maths/math/mathematics/ma → MA
+chemical/chemistry/che→CHE, computer/cse/cs→CSE, mechanical/me/mech→ME,
+electrical/ee→EE, electronics/ece→ECE, civil/ce→CE, physics/phy→PHY,
+maths/math/mathematics→MA
 
 ═══════════════════════════════════════════════════
-PRONOUN RESOLUTION:
+OTHER INTENTS:
 ═══════════════════════════════════════════════════
-If the query uses "he", "she", "they", "his", "her", "it", "that faculty" —
-resolve them using conversation history below.
+- faculty_schedule: what/when a faculty teaches
+- free_slots: when a FACULTY is free
+- subject_info: who teaches a subject or when it is taught
+- sem_timetable: full timetable of a class/branch/semester
+- general: anything else
 
-═══════════════════════════════════════════════════
-OTHER INTENT RULES:
-═══════════════════════════════════════════════════
-- faculty_schedule: user asks what/when a faculty teaches
-- subject_info: user asks who teaches a subject or when it is taught
-- free_slots: user asks when a faculty is free or available
-- sem_timetable: user asks for full timetable of a class/branch/semester
-- general: anything not covered above
+PRONOUN RESOLUTION: Resolve "he/she/they/his/her/it" using conversation history.
 
 {history_section}
 Current Query: "{query}"
@@ -107,13 +97,11 @@ def parse_query(user_query: str, history: list = []) -> dict:
             temperature=0,
         )
         raw = response.choices[0].message.content.strip()
-
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
         raw = raw.strip()
-
         return json.loads(raw)
 
     except Exception as e:
@@ -127,16 +115,13 @@ def parse_query(user_query: str, history: list = []) -> dict:
 
 if __name__ == "__main__":
     tests = [
+        "when is ee-304 free on monday",
+        "when is ee 304 empty on monday",
+        "which periods is cy-102 available on wednesday",
         "ee-304 on monday",
         "what is in cy-102 wednesday period3",
-        "sb-3 thursday period2",
-        "alt-3-3 friday",
-        "who is teaching in l8-b on tuesday",
-        "bsc chemical 4th semester timetable",
-        "when is emf theory taught",
-        "is rawel singh free on monday",
     ]
     for q in tests:
         print(f"\nQ: {q}")
-        result = parse_query(q)
-        print(f"→ intent={result['intent']}, room={result['room']}, faculty={result['faculty']}, subject={result['subject']}")
+        r = parse_query(q)
+        print(f"→ intent={r['intent']}, room={r['room']}, day={r['day']}")
